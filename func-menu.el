@@ -242,7 +242,8 @@
 ;;; Code:
 
 (defmacro fume-bomb-proof (&rest forms)
-  (` (condition-case () (progn (,@ forms)) (t nil))))
+  `(condition-case () (progn ,@forms) (t nil)))
+;;  (` (condition-case () (progn (,@ forms)) (t nil))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -269,12 +270,18 @@ Performs a defvar, then executes `make-variable-buffer-local' on
 the variable.  Also sets the `permanent-local' property, so that
 `kill-all-local-variables' (called by major-mode setting commands)
 won't destroy func-menu control variables."
-  (` (progn
-       (if (, doc)
-           (defvar (, var) (, value) (, doc))
-         (defvar (, var) (, value)))
-       (make-variable-buffer-local '(, var))
-       (put '(, var) 'permanent-local t))))
+  `(progn
+     (if ,doc
+	 (defvar ,var ,value ,doc)
+       (defvar ,var ,value))
+     (make-variable-buffer-local ',var)
+     (put ',var 'permanent-local t)))
+  ;; (` (progn
+  ;;      (if (, doc)
+  ;;          (defvar (, var) (, value) (, doc))
+  ;;        (defvar (, var) (, value)))
+  ;;      (make-variable-buffer-local '(, var))
+  ;;      (put '(, var) 'permanent-local t))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;  Backward compatibility hacks for older versions of XEmacs  ;;;;;;;
@@ -436,19 +443,30 @@ the buffer contains more lines than the present window height."
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defun fume-add-menu (easymenu-menu)
+  (let (menu-name menu-name-symbol)
+    (if (not (eq (car easymenu-menu) 'keymap))
+	(error "Not an easymenu menu: %s" easymenu-menu))
+    (setq menu-name (cadr easymenu-menu))
+    (if (not (stringp menu-name))
+	(error "Can't extract menu name from easymenu: %s" easymenu-menu))
+    (setq menu-name-symbol (intern menu-name))
+    (define-key-after (lookup-key (current-local-map) [menu-bar])
+      (vector menu-name-symbol)
+      (cons menu-name easymenu-menu) t)
+    ))
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 (defmacro xemacs-check-argument-type (predicate argument)
   "Check that ARGUMENT satisfies PREDICATE.
-This is a macro, and ARGUMENT is not evaluated.  If ARGUMENT is an lvalue,
-this function signals a continuable `wrong-type-argument' error until the
-returned value satisfies PREDICATE, and assigns the returned value
-to ARGUMENT.  Otherwise, this function signals a non-continuable
-`wrong-type-argument' error if the returned value does not satisfy PREDICATE."
-  (if (symbolp argument)
-      `(if (not (,(eval predicate) ,argument))
-	   (setq ,argument
-		 (wrong-type-argument ,predicate ,argument)))
-    `(if (not (,(eval predicate) ,argument))
-	 (signal-error 'wrong-type-argument (list ,predicate ,argument)))))
+This is a macro, and ARGUMENT is not evaluated.  This function
+signals a non-continuable `wrong-type-argument' error if the
+returned value does not satisfy PREDICATE."
+  `(if (not (,(eval predicate) ,argument))
+       (signal-error 'wrong-type-argument (list ,predicate ,argument))))
 
 (defun xemacs-replace-in-string (str regexp newtext &optional literal)
   "Replace all matches in STR for REGEXP with NEWTEXT string,
@@ -1813,11 +1831,6 @@ If no connection is in this alist for a given mode, a default method is used")
 ;;;;;;;;;;;;;;;;;;;;;;;;  General utility functions  ;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; modeline refresh routine
-;;
-(or (fboundp 'redraw-modeline)
-    (defun redraw-modeline () (set-buffer-modified-p (buffer-modified-p))))
-
 ;; Smart mouse positioning
 ;;
 (if (fboundp 'window-edges)             ; old method
@@ -1863,20 +1876,13 @@ Otherwise returns fume-function-name-regexp"
 
 (defun fume-remove-menubar-entry ()
   (interactive)
-  (cond ( (and fume-running-xemacs current-menubar)
-	  (delete-menu-item (list fume-menubar-menu-name))
-	  ;; force update of the menubar
-	  (redraw-modeline))
-	( t
-	  (define-key (current-local-map) [menu-bar words] nil)
-	  (force-mode-line-update))
-	))
+  (define-key (current-local-map) [menu-bar words] nil)
+  (force-mode-line-update))
 
 (defun fume-update-menubar-entry ()
   "Return t if menubar was updated, nil otherwise."
-  (and fume-running-xemacs
-       fume-not-tty
-       (assoc fume-menubar-menu-name current-menubar)
+  (and fume-not-tty
+       ;;(assoc fume-menubar-menu-name current-menubar)
        (save-window-excursion (function-menu t))
        t))
 
@@ -1980,7 +1986,7 @@ The trick is to start from the end."
   "Toggle whether func-menu displays function names in the modeline."
   (interactive)
   (setq fume-display-in-modeline-p (not fume-display-in-modeline-p))
-  (if (interactive-p) (fume-tickle-modeline)))
+  (if (called-interactively-p) (fume-tickle-modeline)))
 
 (defun fume-tickle-modeline ()
   "Routine to display function before point in the modeline."
@@ -1999,7 +2005,7 @@ The trick is to start from the end."
          (fume-remove-post-command-hook 'fume-tickle-modeline)
          (fume-add-post-command-hook 'fume-maybe-install-modeline-feature)))
   ;; force update of the modeline
-  (redraw-modeline))
+  (force-mode-line-update))
 
 (fume-defvar-local fume-modeline-buffer-identification-0 nil
   "Storage for original modeline-buffer-identification")
@@ -2357,7 +2363,7 @@ must take two arguments, function menu item name (a string) and the position
 
   (catch 'no-functions
     (or (fume-set-defaults)
-        (if (not (interactive-p))
+        (if (not (called-interactively-p))
             (throw 'no-functions t)
           (error "func-menu does not support the mode \"%s\"" mode-name)))
 
@@ -2367,7 +2373,7 @@ must take two arguments, function menu item name (a string) and the position
             (fume-remove-menubar-entry)
           (fume-rescan-buffer)))
     (or fume-funclist
-        (if (not (interactive-p))
+        (if (not (called-interactively-p))
             (throw 'no-functions t)
           (error "No functions found in this buffer")))
 
@@ -2378,160 +2384,104 @@ must take two arguments, function menu item name (a string) and the position
     (fume-maybe-install-modeline-feature)
 
     (or menu-item-function (setq menu-item-function 'fume-goto-function))
-    ;; The rest of this routine works only for (Lucid) XEmacs
-    (if fume-running-xemacs
-	;; Create the menu for xemacs
-	(let* ((count 0)
-	       (index-method
-		(intern-soft (format "fume-index-sublist-method-%d"
-				     fume-index-method)))
-	       function-menu
-	       (function-menu-items
-		(mapcar
-		 (function
-		  (lambda (sublist)
-		    (setq count (1+ count))
-		    (cons
-		     (format "%s" (funcall index-method sublist count))
-		     (mapcar
-		      (function
-		       (lambda (menu)
-			 (vector
-			  (fume-trim-string (format "%s" (car menu)) "&")
-			  (list menu-item-function (car menu) (cdr menu))
-			  t)))
-		      sublist))))
-		 (fume-split fume-funclist fume-max-items))))
 
-	  (or (> count 1)
-	      (setq function-menu-items (cdr (car function-menu-items))))
+    ;; Create the menu for emacs
+    (let* ( (count 0)
+	    (index-method
+	     (intern-soft (format "fume-index-sublist-method-%d"
+				  fume-index-method)))
+	    function-menu
+;;	    fume-menu
+	    (function-menu-items
+	     (mapcar
+	      (function
+	       (lambda (sublist)
+		 (setq count (1+ count))
+		 (cons
+		  (format "%s" (substring-no-properties
+				(funcall index-method sublist count)))
+		  (mapcar
+		   (function
+		    (lambda (menu)
+		      (vector
+		       (fume-trim-string (format "%s"
+						 (substring-no-properties
+						  (car menu))) "&")
+		       (list menu-item-function
+			     (substring-no-properties (car menu))
+			     (cdr menu))
+		       t)))
+		   sublist))))
+	      (fume-split fume-funclist fume-max-items)))
+	    )
+      (or (> count 1)
+	  (setq function-menu-items (cdr (car function-menu-items))))
 
-	  (if return-only
-	      nil
-	    (setq function-menu
-		  `( ((,@ function-menu-items)
-		      "----"
-		      ["Display full list of functions"
-		       fume-list-functions t]
-		      ;; Bill Dubuque <wgd@martigny.ai.mit.edu>
-		      ;; This doesn't work with the old backquote.el
-		      ;;[(, (concat "Rescan buffer :  " (buffer-name)))
-		      ;; (fume-rescan-buffer (, (null use-menubar))) t]
-		      (, (vector
-			  (concat "Rescan buffer :  " (buffer-name))
-			  (list 'fume-rescan-buffer (null use-menubar))
-			  t))
-		      "----"
-		      ["Go to next function"
-		       fume-goto-next-function t]
-		      ["Go to previous function"
-		       fume-goto-previous-function t]
-		      "----"
-		      ["Toggle modeline display"
-		       fume-toggle-modeline-display t]
-		      ["Toggle buffer auto rescanning"
-		       fume-toggle-auto-rescanning t]
-		      ["About Func-Menu" fume-about t])))
-
-	    (cond (use-menubar
-		   (fume-remove-menubar-entry)
-		   (set-buffer-menubar (copy-sequence current-menubar))
-		   (fume-add-submenu
-		    fume-menubar-menu-name
-		    `( ((,@ function-menu)
-			"----"
-			["Remove Function Menu from menubar"
-			 fume-remove-menubar-entry t]))
-		    fume-menubar-menu-location))
-
-		  ((and fume-not-tty ; trap tty segmentation faults...
-			(not (popup-up-p)))
-		   (or (fume-update-menubar-entry)
-		       (setq function-menu
-			     (cons
-			      ["Put Function Menu into menubar"
-			       (function-menu t) t]
-			      (cons "----" function-menu))))
-
-		   (if fume-auto-position-popup
-		       (fume-set-mouse-position))
-
-		   (popup-menu
-		    (cons fume-menubar-menu-name function-menu)))))
-
-	  ;; Return basic function menu for display by another function
-	  function-menu-items)
-      ;; Create the menu for emacs
-      (let* ( (count 0)
-	      (index-method
-	       (intern-soft (format "fume-index-sublist-method-%d"
-				    fume-index-method)))
-	      function-menu
-	      fume-menu
-	      (function-menu-items
-	       (mapcar
-		(function
-		 (lambda (sublist)
-		   (setq count (1+ count))
-		   (cons
-		    (format "%s" (substring-no-properties
-				  (funcall index-method sublist count)))
-		    (mapcar
-		     (function
-		      (lambda (menu)
-			(vector
-			 (fume-trim-string (format "%s"
-						   (substring-no-properties
-						    (car menu))) "&")
-			 (list menu-item-function
-			       (substring-no-properties (car menu))
-			       (cdr menu))
-			 t)))
-		     sublist))))
-		(fume-split fume-funclist fume-max-items)))
-	      )
-	(or (> count 1)
-	    (setq function-menu-items (cdr (car function-menu-items))))
-
-	(if return-only
-	    nil
-	  (setq function-menu
- 		(` ( ,fume-menubar-menu-name
-		    (,@ function-menu-items)
-		    "----"
-		    ["Display full list of functions"
-		     fume-list-functions t]
-		    ;; Bill Dubuque <wgd@martigny.ai.mit.edu>
-		    ;; This doesn't work with the old backquote.el
-		    ;;[(, (concat "Rescan buffer :  " (buffer-name)))
-		    ;; (fume-rescan-buffer (, (null use-menubar))) t]
-		    (, (vector
-			(concat "Rescan buffer: " (buffer-name))
-			(list 'fume-rescan-buffer (null use-menubar))
-			t))
-		    "----"
-		    ["Go to next function"
-		     fume-goto-next-function t]
-		    ["Go to previous function"
-		     fume-goto-previous-function t]
-		    "----"
-		    ["Toggle modeline display"
-		     fume-toggle-modeline-display t]
-		    ["Toggle buffer auto rescanning"
-		     fume-toggle-auto-rescanning t]
-		    ["About Func-Menu" fume-about t])))
-	  ;; (easy-menu-define fume-menu (current-local-map)
-	  ;;   "Menu for functions list"
-	  ;;   function-menu)
-	  (easy-menu-define fume-menu nil
-	    "Menu for functions list"
-	    function-menu)
-	  (define-key-after (lookup-key (current-local-map) [menu-bar])
-	    [Functions]
-	    (cons "Functions" fume-menu) t)
-	  )
+      (if return-only
+	  nil
+	(setq function-menu
+	      `( ,fume-menubar-menu-name
+		 ,@function-menu-items
+		 "----"
+		 ["Display full list of functions"
+		  fume-list-functions t]
+		 ;; Bill Dubuque <wgd@martigny.ai.mit.edu>
+		 ;; This doesn't work with the old backquote.el
+		 ;;[(, (concat "Rescan buffer :  " (buffer-name)))
+		 ;; (fume-rescan-buffer (, (null use-menubar))) t]
+		 ,(vector
+		   (concat "Rescan buffer: " (buffer-name))
+		   (list 'fume-rescan-buffer (null use-menubar))
+		   t)
+		 "----"
+		 ["Go to next function"
+		  fume-goto-next-function t]
+		 ["Go to previous function"
+		  fume-goto-previous-function t]
+		 "----"
+		 ["Toggle modeline display"
+		  fume-toggle-modeline-display t]
+		 ["Toggle buffer auto rescanning"
+		  fume-toggle-auto-rescanning t]
+		 ["About Func-Menu" fume-about t]))
+	;; (` ( ,fume-menubar-menu-name
+	;;     (,@ function-menu-items)
+	;;     "----"
+	;;     ["Display full list of functions"
+	;;      fume-list-functions t]
+	;;     ;; Bill Dubuque <wgd@martigny.ai.mit.edu>
+	;;     ;; This doesn't work with the old backquote.el
+	;;     ;;[(, (concat "Rescan buffer :  " (buffer-name)))
+	;;     ;; (fume-rescan-buffer (, (null use-menubar))) t]
+	;;     (, (vector
+	;; 	(concat "Rescan buffer: " (buffer-name))
+	;; 	(list 'fume-rescan-buffer (null use-menubar))
+	;; 	t))
+	;;     "----"
+	;;     ["Go to next function"
+	;;      fume-goto-next-function t]
+	;;     ["Go to previous function"
+	;;      fume-goto-previous-function t]
+	;;     "----"
+	;;     ["Toggle modeline display"
+	;;      fume-toggle-modeline-display t]
+	;;     ["Toggle buffer auto rescanning"
+	;;      fume-toggle-auto-rescanning t]
+	;;     ["About Func-Menu" fume-about t])))
+	;; (easy-menu-define fume-menu (current-local-map)
+	;;   "Menu for functions list"
+	;;   function-menu)
+	(easy-menu-define fume-menu nil
+	  "Menu for functions list"
+	  function-menu)
+	(fume-add-menu fume-menu)
+	;; (define-key-after (lookup-key (current-local-map) [menu-bar])
+	;;   [Functions]
+	;;   (cons "Functions" fume-menu) t)
 	)
-      )))
+      function-menu-items
+      )
+    ))
 
 (defun fume-mouse-function-goto (event)
   "Goto function clicked on or prompt with completion in the minibuffer."
@@ -2700,7 +2650,8 @@ string with two `%s' elements."
 
 (defvar fume-list-mode-map nil)
 (or fume-list-mode-map
-    (let ((map (make-sparse-keymap)))
+    (let ((map (make-keymap)))
+      (suppress-keymap map t)	;; not good w/sparse keymaps
       (define-key map "q"    'fume-list-functions-quit)
       (define-key map "h"    'fume-list-functions-help)
       (define-key map "?"    'fume-list-functions-help)
@@ -2749,7 +2700,7 @@ string with two `%s' elements."
                 (set-buffer-modified-p nil)
                 (goto-char (point-min))))))
          fume-funclist))
-    (cond ((interactive-p)
+    (cond ((called-interactively-p)
            (if current-prefix-arg
                (switch-to-buffer fume-buffer-name)
              (setq fume-list-trampled-buffer (window-buffer (next-window)))
@@ -2842,7 +2793,7 @@ Note: if you had been using
 	  ((and (not turn-it-on) fume-mode) ;; turn it off
 	   (fume-remove-menubar-entry)
 	   (setq fume-mode nil)))
-    (redraw-modeline)))
+    (force-mode-line-update)))
 
 (add-minor-mode 'fume-mode fume-mode-line-string fume-mode-map)
 

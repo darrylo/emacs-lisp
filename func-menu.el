@@ -2,7 +2,7 @@
 
 ;; Author:     David Hughes <d.hughes@videonetworks.com>
 ;; Maintainer: The XEmacs Development Team <xemacs-beta@xemacs.org>
-;; Version: 2.66
+;; Version: 2.90
 ;; Keywords: tools, c, lisp
 
 ;; This file is part of XEmacs.
@@ -1029,7 +1029,7 @@ displayed in the modeline.")
 Add the following line to your .emacs if you want Makefile support.
 Note, this can be very slow for large or non-trivial Makefiles.
 
-(add-hook 'makefile-mode-hook 'fume-add-menubar-entry)")
+(add-hook 'makefile-mode-hook 'fume-setup-buffer)")
 
 ;; Directory Listings
 ;;
@@ -1231,7 +1231,7 @@ Note, this can be very slow for large or non-trivial Makefiles.
             (forward-sexp -1)
             (setq beg (point))
             (forward-sexp)
-            (cons (buffer-substring beg (point)) beg))))))
+            (cons (buffer-substring-no-properties beg (point)) beg))))))
 
 ;; General purpose sexp find function
 ;;
@@ -1240,7 +1240,7 @@ Note, this can be very slow for large or non-trivial Makefiles.
   (set-buffer buffer)
   (if (re-search-forward fume-function-name-regexp nil t)
       (let ((beg (save-excursion (forward-sexp -1) (point))))
-        (cons (buffer-substring beg (point)) beg))))
+        (cons (buffer-substring-no-properties beg (point)) beg))))
 
 ;; Specialised routine to get the next Ehdm entity in the buffer.
 ;; C. Michael Holloway <c.m.holloway@larc.nasa.gov>
@@ -1251,7 +1251,7 @@ Note, this can be very slow for large or non-trivial Makefiles.
   (if (re-search-forward fume-function-name-regexp nil t)
       (let ((beg (match-beginning 0))
             (end (match-end 0)))
-        (cons (buffer-substring beg end) beg))))
+        (cons (buffer-substring-no-properties beg end) beg))))
 
 ;; Specialised routine to get the next PVS entity in the buffer.
 ;; C. Michael Holloway <c.m.holloway@larc.nasa.gov>
@@ -1265,7 +1265,7 @@ Note, this can be very slow for large or non-trivial Makefiles.
         (goto-char (1- end))
         (if (looking-at ":")
             (setq end (1- end)))
-        (cons (buffer-substring beg end) beg))))
+        (cons (buffer-substring-no-properties beg end) beg))))
 
 ;; Specialised routine to get the next C function name in the buffer.
 ;; Modified 16/12/96: Jerome Bertorelle <bertorel@telspace.alcatel.fr>
@@ -1290,7 +1290,7 @@ Note, this can be very slow for large or non-trivial Makefiles.
             (forward-sexp -1)
             (setq beg (point))
             (forward-sexp)
-            (setq name (buffer-substring beg (point)))
+            (setq name (buffer-substring-no-properties beg (point)))
             ;; ghastly crock for DEFUN declarations
             (cond ((string-match "^DEFUN\\s-*" name)
                    (forward-word 1)
@@ -1301,7 +1301,7 @@ Note, this can be very slow for large or non-trivial Makefiles.
                           (setq name
                                 (format "%s %s"
                                         name
-                                        (buffer-substring beg (point))))))))
+                                        (buffer-substring-no-properties beg (point))))))))
             ;; kludge to avoid `void' etc in menu
             (if (string-match
                 "\\`\\(void\\|if\\|else if\\|else\\|switch\\|for\\|while\\)\\'"
@@ -1347,7 +1347,7 @@ to use, and the cdr of which is the match position of the function name."
             (if (char-equal (following-char) ?\;) (throw 'skip t)))
           (throw
            'found
-           (cons (buffer-substring (setq p (match-beginning p)) (point)) p))))
+           (cons (buffer-substring-no-properties (setq p (match-beginning p)) (point)) p))))
       nil)))
 
 ;; Objective-C
@@ -1363,7 +1363,7 @@ to use, and the cdr of which is the match position of the function name."
             (setq beg (point))
             (forward-sexp)
             (if (char-equal (following-char) ?\:) (forward-char))
-            (setq name (buffer-substring beg (point)))
+            (setq name (buffer-substring-no-properties beg (point)))
             (cons name beg))
         (let ((char (progn ; else this is a regular C func
                       (backward-up-list 1)
@@ -1380,7 +1380,7 @@ to use, and the cdr of which is the match position of the function name."
               (forward-sexp -1)
               (setq beg (point))
               (forward-sexp)
-              (setq name (buffer-substring beg (point)))
+              (setq name (buffer-substring-no-properties beg (point)))
               ;; kludge to avoid `void' in menu
               (if (string-match "^void\\s-*" name)
                   (fume-find-next-function-name buffer)
@@ -1432,12 +1432,12 @@ See also `fume-perl-fully-qualified-names'."
   (if (re-search-forward fume-function-name-regexp nil t)
       (save-excursion
         (let* ((retpnt (match-beginning 2))
-               (retname (buffer-substring retpnt (match-end 2))))
+               (retname (buffer-substring-no-properties retpnt (match-end 2))))
           (goto-char (match-beginning 0))
           (cond ((looking-at "^\\s-*def")
                  (re-search-backward
                   "\n?\\s-*class\\s-*\\([A-Z][A-Za-z0-9_]*\\)\\s-*" nil t)
-		 (let* ((classname (buffer-substring
+		 (let* ((classname (buffer-substring-no-properties
 				    (match-beginning 1) (match-end 1))))
 		   (if (not (string-match (concat "^" classname "\\.") retname))
 		       (setq retname (concat classname "." retname))))))
@@ -1458,7 +1458,7 @@ See also `fume-perl-fully-qualified-names'."
         (if (and (looking-at "[^;(]*{")
                  (not (fume-cc-inside-comment)))
             ;; This is a method definition and we're not in a comment
-            (let ((str (buffer-substring beg end)))
+            (let ((str (buffer-substring-no-properties beg end)))
               ;; Bob Weiner <weiner@altrasoft.com> added exact match
               ;; delimiters so function names that happen to contain
               ;; any of these terms are not eliminated.  The old version
@@ -1480,7 +1480,7 @@ See also `fume-perl-fully-qualified-names'."
   (if (re-search-forward fume-function-name-regexp nil t)
       (save-excursion
         (let* ((retpnt (match-beginning 2))
-               (retname (buffer-substring retpnt (match-end 2))))
+               (retname (buffer-substring-no-properties retpnt (match-end 2))))
 	  (when fume-python-fully-qualified-names
 	    (goto-char (match-beginning 0))
 	    (cond ((looking-at "\\s-+def")
@@ -1488,7 +1488,7 @@ See also `fume-perl-fully-qualified-names'."
 		    "^class\\s-*\\([A-Za-z0-9_]+\\)\\s-*[(:]" nil t)
 		   (setq retname
 			 (concat
-			  (buffer-substring (match-beginning 1) (match-end 1))
+			  (buffer-substring-no-properties (match-beginning 1) (match-end 1))
 			  "."
 			  retname)))))
 	    (cons retname retpnt)))))
@@ -1515,7 +1515,7 @@ See also `fume-perl-fully-qualified-names'."
   (if (re-search-forward fume-function-name-regexp nil t)
       (let ((beg (match-beginning 2))
             (end (match-end 2)))
-        (cons (buffer-substring beg end) beg))))
+        (cons (buffer-substring-no-properties beg end) beg))))
 
 ;; Specialised routine to find the next Fortran function or subroutine
 ;;
@@ -1530,7 +1530,7 @@ See also `fume-perl-fully-qualified-names'."
         (skip-chars-backward " \t")
         (if (re-search-forward name-regexp eol t)
             ;; name is ok; so return it
-            (cons (buffer-substring pos (point)) pos)
+            (cons (buffer-substring-no-properties pos (point)) pos)
           ;; rubbish found; skip to next function
           (fume-find-next-fortran-function-name buffer)))))
 
@@ -1547,7 +1547,7 @@ See also `fume-perl-fully-qualified-names'."
         ;; start with / or [.
         (if (looking-at "\\s-+\\(/\\|\\[\\)")
             (forward-sexp))
-        (cons (buffer-substring beg (point)) beg))))
+        (cons (buffer-substring-no-properties beg (point)) beg))))
 
 ;; Specialised routine to get the next prolog fact/clause name in the buffer
 ;; Laszlo Teleki <laszlo@ipb.uni-bonn.de>
@@ -1558,7 +1558,7 @@ See also `fume-perl-fully-qualified-names'."
   (if (re-search-forward fume-function-name-regexp nil t)
       (let ((beg (progn (beginning-of-line 1) (point))))
         (forward-sexp)
-        (cons (buffer-substring beg (point)) beg))))
+        (cons (buffer-substring-no-properties beg (point)) beg))))
 
 ;; Specialized routine to get the next Maple function name in the buffer
 ;; Luc Tancredi <Luc.Tancredi@sophia.inria.fr>
@@ -1570,7 +1570,7 @@ See also `fume-perl-fully-qualified-names'."
   (if (re-search-forward fume-function-name-regexp nil t)
       (let ((beg (progn (backward-up-list 1) (forward-sexp -2) (point))))
         (forward-sexp)
-        (cons (buffer-substring beg (point)) beg))))
+        (cons (buffer-substring-no-properties beg (point)) beg))))
 
 ;; Specialised routine to get the next latex section name in the buffer
 ;; Philippe Queinnec <queinnec@cenatls.cena.dgac.fr>
@@ -1581,9 +1581,9 @@ See also `fume-perl-fully-qualified-names'."
   "Search for the next LaTeX section in BUFFER."
   (set-buffer buffer)
   (if (re-search-forward fume-function-name-regexp nil t)
-      (let* ((secname (buffer-substring (match-beginning 1) (match-end 1)))
+      (let* ((secname (buffer-substring-no-properties (match-beginning 1) (match-end 1)))
              (beg (match-beginning 4))
-             (name (buffer-substring beg (match-end 4))))
+             (name (buffer-substring-no-properties beg (match-end 4))))
         (cond ((string= secname "chapter")
                (setq fume-tex-chapter (1+ fume-tex-chapter)
                      fume-tex-section 0
@@ -1633,12 +1633,12 @@ See also `fume-perl-fully-qualified-names'."
                (re-search-forward
                 "\\(function\\s-+\\)\\([A-Za-z_][A-Za-z_0-9]*\\)" nil t)
                (setq beg (match-beginning 2)
-                     name (buffer-substring beg (match-end 2))))
+                     name (buffer-substring-no-properties beg (match-end 2))))
               (t
                (re-search-backward
                 "\\(^\\|\\s-\\)\\([A-Za-z_][A-Za-z_0-9]*\\)" beg t)
                (setq beg (match-beginning 2)
-                     name (buffer-substring beg (match-end 2)))))
+                     name (buffer-substring-no-properties beg (match-end 2)))))
         (if (null name)
             (fume-find-next-ksh-function-name buffer)
           (end-of-line)
@@ -1653,7 +1653,7 @@ See also `fume-perl-fully-qualified-names'."
   (if (re-search-forward fume-function-name-regexp nil t)
       (let ((beg (progn (if (looking-at "(") (forward-char 1)) (point)))
             (end (save-excursion (forward-sexp) (point))))
-        (cons (buffer-substring beg end) beg))))
+        (cons (buffer-substring-no-properties beg end) beg))))
 
 ;; Specialised routine to get the next BibTeX citation in the buffer
 ;; C. Michael Holloway <c.m.holloway@larc.nasa.gov>
@@ -1664,7 +1664,7 @@ See also `fume-perl-fully-qualified-names'."
   (if (re-search-forward fume-function-name-regexp nil t)
       (let ((beg (match-beginning 1))
             (end (match-end 1)))
-        (cons (buffer-substring beg end) beg))))
+        (cons (buffer-substring-no-properties beg end) beg))))
 
 ;; Specialised routine to get the next SGML declaration in the buffer
 ;; Thomas Plass <thomas.plass@mid-heidelberg.de>
@@ -1673,9 +1673,9 @@ See also `fume-perl-fully-qualified-names'."
   "Search for the next SGML declaration in BUFFER."
   (set-buffer buffer)
   (if (re-search-forward fume-function-name-regexp nil t)
-      (let ((type (buffer-substring (match-beginning 1) (match-end 1)))
+      (let ((type (buffer-substring-no-properties (match-beginning 1) (match-end 1)))
             (beg (match-beginning 2))
-            (name (buffer-substring (match-beginning 2) (match-end 2))))
+            (name (buffer-substring-no-properties (match-beginning 2) (match-end 2))))
         (if (string= (downcase type) "element")
             (setq name (format "%-17s%3s" name "EL"))
           (setq name (format "%-17s%3s" name "ENT")))
@@ -1693,7 +1693,7 @@ See also `fume-perl-fully-qualified-names'."
 
         (if (looking-at fume-function-name-regexp-ada-ignore)
             (fume-find-next-ada-function-name buffer)
-          (cons (buffer-substring beg end) beg)))))
+          (cons (buffer-substring-no-properties beg end) beg)))))
 
 ;; Makefiles
 ;; Paul Filipski & Anthony Girardin <{filipski,girardin}@blackhawk.com>
@@ -1704,7 +1704,7 @@ See also `fume-perl-fully-qualified-names'."
   (if (re-search-forward fume-function-name-regexp nil t)
       (let ((beg (match-beginning 1))
             (end (match-end 1)))
-        (cons (buffer-substring beg end) beg))))
+        (cons (buffer-substring-no-properties beg end) beg))))
 
 ;; Find next pascal function in the buffer
 ;; Espen Skoglund <espensk@stud.cs.uit.no>
@@ -1715,7 +1715,7 @@ See also `fume-perl-fully-qualified-names'."
   (if (re-search-forward fume-function-name-regexp nil t)
       (let ((beg (match-beginning 2))
             (end (match-end 2)))
-        (cons (buffer-substring beg end) beg))))
+        (cons (buffer-substring-no-properties beg end) beg))))
 
 ;; Verilog support
 ;; Matt Sale <mdsale@icdc.delcoelect.com>
@@ -1726,7 +1726,7 @@ See also `fume-perl-fully-qualified-names'."
   (if (re-search-forward fume-function-name-regexp nil t)
       (let ((beg (match-beginning 2))
             (end (match-end 2)))
-        (cons (buffer-substring beg end) beg))))
+        (cons (buffer-substring-no-properties beg end) beg))))
 
 ;; Specialised routine to get the next IDL function in the buffer
 ;;
@@ -1738,7 +1738,7 @@ See also `fume-perl-fully-qualified-names'."
   (if (re-search-forward (car fume-function-name-regexp-idlwave) nil t)
       (let ((beg (match-beginning (cdr fume-function-name-regexp-idlwave)))
             (end (match-end (cdr fume-function-name-regexp-idlwave))))
-        (cons (buffer-substring beg end) beg))))
+        (cons (buffer-substring-no-properties beg end) beg))))
 
 ;; Assembly
 ;; Bob Weiner <weiner@altrasoft.com>
@@ -1748,7 +1748,7 @@ See also `fume-perl-fully-qualified-names'."
   (set-buffer buffer)
   ;; Search for the function
   (if (re-search-forward fume-function-name-regexp nil t)
-      (cons (buffer-substring (match-beginning 1) (match-end 1))
+      (cons (buffer-substring-no-properties (match-beginning 1) (match-end 1))
             (match-beginning 1))))
 
 ;; Specialised routine to get the next manual section name in the buffer
@@ -1760,7 +1760,7 @@ See also `fume-perl-fully-qualified-names'."
   (if (re-search-forward fume-function-name-regexp nil t)
       (let ((beg (match-beginning 0))
 	    (end (match-end 0)))
-	(cons (buffer-substring beg end) beg))))
+	(cons (buffer-substring-no-properties beg end) beg))))
 
 ;; This is where you can hook in other languages which may need a different
 ;; method to scan for function names. Otherwise, the default defun used is
@@ -1847,9 +1847,9 @@ Otherwise returns fume-function-name-regexp"
                 'fume-find-next-function-name)))
   fume-function-name-regexp)
 
-(defun fume-add-menubar-entry (&optional force)
-  (interactive)
-  )
+;; (defun fume-add-menubar-entry (&optional force)
+;;   (interactive)
+;;   )
   ;; (if force
   ;;     (save-window-excursion (function-menu t))
   ;;   (enqueue-eval-event 'fume-do-add-menubar-entry (current-buffer))))
@@ -1863,10 +1863,14 @@ Otherwise returns fume-function-name-regexp"
 
 (defun fume-remove-menubar-entry ()
   (interactive)
-  (cond ((and fume-running-xemacs current-menubar)
-         (delete-menu-item (list fume-menubar-menu-name))
-         ;; force update of the menubar
-         (redraw-modeline))))
+  (cond ( (and fume-running-xemacs current-menubar)
+	  (delete-menu-item (list fume-menubar-menu-name))
+	  ;; force update of the menubar
+	  (redraw-modeline))
+	( t
+	  (define-key (current-local-map) [menu-bar words] nil)
+	  (force-mode-line-update))
+	))
 
 (defun fume-update-menubar-entry ()
   "Return t if menubar was updated, nil otherwise."
@@ -1894,10 +1898,9 @@ Otherwise returns fume-function-name-regexp"
 
 (defun fume-what-looking-at (&optional check-primary-selection-p)
   (or (and check-primary-selection-p
-           primary-selection-extent
+	   (use-region-p)
            (fume-bomb-proof
-            (prog1 (buffer-substring (region-beginning) (region-end))
-              (and zmacs-regions (zmacs-deactivate-region) (sit-for 0)))))
+            (buffer-substring-no-properties (region-beginning) (region-end))))
       (let (name
             (orig-syntax-table (syntax-table)))
         (if fume-syntax-table
@@ -1913,7 +1916,7 @@ Otherwise returns fume-function-name-regexp"
                     (let ((beg (progn (forward-char 1) (point))))
                       (forward-sexp -1)
                       (while (looking-at "\\s'") (forward-char 1))
-                      (setq name (buffer-substring beg (point)))))))
+                      (setq name (buffer-substring-no-properties beg (point)))))))
           (set-syntax-table orig-syntax-table)
           name))))
 
@@ -2406,7 +2409,7 @@ must take two arguments, function menu item name (a string) and the position
 	  (if return-only
 	      nil
 	    (setq function-menu
-		  (` ((,@ function-menu-items)
+		  `( ((,@ function-menu-items)
 		      "----"
 		      ["Display full list of functions"
 		       fume-list-functions t]
@@ -2435,7 +2438,7 @@ must take two arguments, function menu item name (a string) and the position
 		   (set-buffer-menubar (copy-sequence current-menubar))
 		   (fume-add-submenu
 		    fume-menubar-menu-name
-		    (` ((,@ function-menu)
+		    `( ((,@ function-menu)
 			"----"
 			["Remove Function Menu from menubar"
 			 fume-remove-menubar-entry t]))
@@ -2464,6 +2467,7 @@ must take two arguments, function menu item name (a string) and the position
 	       (intern-soft (format "fume-index-sublist-method-%d"
 				    fume-index-method)))
 	      function-menu
+	      fume-menu
 	      (function-menu-items
 	       (mapcar
 		(function
@@ -2492,7 +2496,7 @@ must take two arguments, function menu item name (a string) and the position
 	(if return-only
 	    nil
 	  (setq function-menu
-		(` ( ,fume-menubar-menu-name
+ 		(` ( ,fume-menubar-menu-name
 		    (,@ function-menu-items)
 		    "----"
 		    ["Display full list of functions"
@@ -2516,11 +2520,16 @@ must take two arguments, function menu item name (a string) and the position
 		    ["Toggle buffer auto rescanning"
 		     fume-toggle-auto-rescanning t]
 		    ["About Func-Menu" fume-about t])))
-	  (easy-menu-define fume-menu (current-local-map)
+	  ;; (easy-menu-define fume-menu (current-local-map)
+	  ;;   "Menu for functions list"
+	  ;;   function-menu)
+	  (easy-menu-define fume-menu nil
 	    "Menu for functions list"
 	    function-menu)
+	  (define-key-after (lookup-key (current-local-map) [menu-bar])
+	    [Functions]
+	    (cons "Functions" fume-menu) t)
 	  )
-
 	)
       )))
 
@@ -2782,16 +2791,16 @@ definition.
 
 (defvar fume-mode-map
   (let ((map (make-sparse-keymap 'fume-minor-mode-map)))
-    (define-key map [(control c) (control f) f] 'function-menu)
-    (define-key map [(control c) (control f) l] 'fume-list-functions)
-    (define-key map [(control c) (control f) r] 'fume-rescan-buffer)
-    (define-key map [(control c) (control f) R] 'fume-toggle-auto-rescanning)
-    (define-key map [(control c) (control f) p] 'fume-goto-previous-function)
-    (define-key map [(control c) (control f) n] 'fume-goto-next-function)
-    (define-key map [(control c) (control f) g] 'fume-prompt-function-goto)
-    (define-key map [(control c) (control f) D] 'fume-toggle-modeline-display)
-    (define-key map [(control c) (control f) h] 'fume-about)
-    (define-key map [(control c) (control f) ??] 'fume-about)
+    (define-key map (kbd "C-c C-f f") 'function-menu)
+    (define-key map (kbd "C-c C-f l") 'fume-list-functions)
+    (define-key map (kbd "C-c C-f r") 'fume-rescan-buffer)
+    (define-key map (kbd "C-c C-f R") 'fume-toggle-auto-rescanning)
+    (define-key map (kbd "C-c C-f p") 'fume-goto-previous-function)
+    (define-key map (kbd "C-c C-f n") 'fume-goto-next-function)
+    (define-key map (kbd "C-c C-f g") 'fume-prompt-function-goto)
+    (define-key map (kbd "C-c C-f D") 'fume-toggle-modeline-display)
+    (define-key map (kbd "C-c C-f h") 'fume-about)
+    (define-key map (kbd "C-c C-f ?") 'fume-about)
 ;    (define-key map '(meta button3) 'mouse-function-menu)
 ;    (define-key map '(meta button1) 'fume-mouse-function-goto)
     map)

@@ -243,7 +243,6 @@
 
 (defmacro fume-bomb-proof (&rest forms)
   `(condition-case () (progn ,@forms) (t nil)))
-;;  (` (condition-case () (progn (,@ forms)) (t nil))))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -258,11 +257,9 @@
 (defun fume-about ()
   (interactive)
   (sit-for 0)
-  (display-message
+  (fume-display-message
    'no-log
    (format "Func-Menu version %s" fume-version)))
-
-(defconst fume-running-xemacs (string-match "XEmacs\\|Lucid" emacs-version))
 
 (defmacro fume-defvar-local (var value &optional doc)
   "Defines VAR as an advertised variable.
@@ -287,8 +284,30 @@ won't destroy func-menu control variables."
 ;;;;;;;;  Backward compatibility hacks for older versions of XEmacs  ;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(or (fboundp 'display-message)
-    (defun display-message (msgtype msg) (message "%s" msg)))
+(defun fume-display-message (msgtype msg)
+  ;;
+  ;; Valiant hack in an attempt to prevent "Scanning ... 100% done" to be
+  ;; stuck in the minibuffer while the user is using the minibuffer for input.
+  ;;
+  (cond ( (and (eq msgtype 'progressdone)
+	       (> fume-display-message-done-delay 0))
+	  ;;
+	  ;; This often appears horrible, as other hooks can and will change
+	  ;; the value of point after the sit-for.  This results in a most
+	  ;; unpleasant user experience.
+	  ;;
+	  (message "%s" msg)
+	  (sit-for fume-display-message-done-delay)
+	  (message nil))
+	( (eq msgtype 'progressdone)
+	  ;;
+	  ;; This is passable, as it hides the message.
+	  ;;
+	  (message nil))
+	( t
+	  (message "%s" msg))
+	)
+  )
 
 (or (fboundp 'defalias)
     ;; poor man's defalias
@@ -414,7 +433,7 @@ the buffer contains more lines than the present window height."
                      shrunkwins)))))
         (select-window OriginalWindow))))
 
-(defvar fume-current-function-name "")
+(fume-defvar-local fume-current-function-name "")
 
 (defconst fume-modeline-buffer-identification
   (if (boundp 'modeline-buffer-identification)
@@ -445,6 +464,7 @@ the buffer contains more lines than the present window height."
 
 (defun fume-add-menu (easymenu-menu)
   (let (menu-name menu-name-symbol)
+    ;; hot-n-cheesy check for an easymenu menu
     (if (not (eq (car easymenu-menu) 'keymap))
 	(error "Not an easymenu menu: %s" easymenu-menu))
     (setq menu-name (cadr easymenu-menu))
@@ -541,12 +561,6 @@ Nil (default) means install it on the menubar itself.  Otherwise, this should
 be a list of strings, each of which names a successively deeper menu under
 which the new menu should be located.")
 
-(defcustom fume-menubar-menu-location "Buffers"
-  "*Name of menu before which function menu should appear (default=\"Buffers\").
-Nil means display it after the last non-right-justified menubar item."
-  :type '(choice (const :tag "Last" nil) (string :format "%v"))
-  :group 'fume)
-
 (defcustom fume-max-items 24
   "*Maximum number of elements in a function menu or submenu (default = 24)."
   :type 'integer
@@ -583,6 +597,22 @@ Nil means inhibit such messages."
 For example, \"Re-Scanning buffer...\".  Nil (default) means inhibit such
 messages."
   :type '(choice (const :tag "None" nil) string)
+  :group 'fume)
+
+(defcustom fume-display-message-done-delay 0
+  "*Once scanning is done, sit-for this many seconds.
+This is a hack to workaround a minibuffer issue where the message can
+occasionally hide the minibuffer during minibuffer input.
+
+The default value of zero means that the \"100%\" progress
+message is not displayed, and the displayed message is instead
+cleared.
+
+However, a non-zero value often does not work properly if hooks
+change the value of point.  This results in a most unpleasant and
+unexpected user experience, and so leaving this value at zero is
+generally preferred."
+  :type 'integer
   :group 'fume)
 
 (defvar fume-rescan-trigger-counter-buffer-size 10000
@@ -2229,9 +2259,9 @@ If optional arg POPMENU is non-nil, brings up the `function-menu'."
     (save-excursion
       (goto-char (point-min))
       (cond (fume-scanning-message
-             (display-message 'progress (format fume-scanning-message 0)))
+             (fume-display-message 'progress (format fume-scanning-message 0)))
             (fume-rescanning-message
-             (display-message 'progress fume-rescanning-message)))
+             (fume-display-message 'progress fume-rescanning-message)))
       (while (setq fnam
                    (condition-case ()
                        (funcall find buffer-to-scan)
@@ -2251,14 +2281,14 @@ If optional arg POPMENU is non-nil, brings up the `function-menu'."
                (if fume-found-function-hook
                    (save-excursion (run-hooks 'fume-found-function-hook)))))
         (if fume-scanning-message
-            (display-message
+            (fume-display-message
              'progress
              (format fume-scanning-message (fume-relative-position)))))
       (cond (fume-scanning-message
-             (display-message
-              'progress (format "%s done" (format fume-scanning-message 100))))
+             (fume-display-message
+              'progressdone (format "%s done" (format fume-scanning-message 100))))
             (fume-rescanning-message
-             (display-message
+             (fume-display-message
               'progress (format "%s done" fume-rescanning-message))))
       ;; make a copy of flst sorted by position in buffer
       (setq fume-modeline-funclist
@@ -2359,7 +2389,7 @@ must take two arguments, function menu item name (a string) and the position
   ;;(interactive "P")
 
   (setq use-menubar
-        (and use-menubar fume-running-xemacs fume-not-tty current-menubar t))
+        (and use-menubar fume-not-tty t))
 
   (catch 'no-functions
     (or (fume-set-defaults)
@@ -2610,7 +2640,7 @@ string with two `%s' elements."
   (interactive)
   (fume-about)
   (sit-for 1)
-  (display-message
+  (fume-display-message
    'prompt
    (format "SPC=%s, p=%s, n=%s, o=%s, G=%s, RET=%s,    q=%s"
            "this"
@@ -2758,8 +2788,7 @@ definition.
   ;; fume minor mode keymap.
   )
 
-(make-variable-buffer-local
- (defvar fume-mode nil))
+(fume-defvar-local fume-mode nil)
 
 (or (assoc 'fume-mode mode-line-misc-info)
     (setq mode-line-misc-info

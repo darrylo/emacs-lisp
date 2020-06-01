@@ -443,39 +443,9 @@ the buffer contains more lines than the present window height."
 (defconst fume-use-local-post-command-hook
   (boundp 'local-post-command-hook))
 
-(cond ((fboundp 'add-submenu)
-       (defconst fume-add-submenu 'add-submenu)
-       (defun fume-munge-menu-args (menu-name submenu before)
-         (list fume-menu-path (cons menu-name submenu) before)))
-      (t
-       (defconst fume-add-submenu 'add-menu)
-       (defun fume-munge-menu-args (menu-name submenu before)
-         (list fume-menu-path menu-name submenu before))))
-
-(defun fume-add-submenu (menu-name submenu before)
-  (apply fume-add-submenu (fume-munge-menu-args menu-name submenu before)))
-
 (defconst fume-not-tty
   (or (and (fboundp 'device-type) (not (eq 'tty (device-type))))
       (and (symbol-value 'window-system) t))) ; obsolete test
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defun fume-add-menu (easymenu-menu)
-  (let (menu-name menu-name-symbol)
-    ;; hot-n-cheesy check for an easymenu menu
-    (if (not (eq (car easymenu-menu) 'keymap))
-	(error "Not an easymenu menu: %s" easymenu-menu))
-    (setq menu-name (cadr easymenu-menu))
-    (if (not (stringp menu-name))
-	(error "Can't extract menu name from easymenu: %s" easymenu-menu))
-    (setq menu-name-symbol (intern menu-name))
-    (define-key-after (lookup-key (current-local-map) [menu-bar])
-      (vector menu-name-symbol)
-      (cons menu-name easymenu-menu) t)
-    ))
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -520,6 +490,15 @@ Otherwise treat `\\' in NEWTEXT as special:
 	      str newstr))
       str)))
 
+(defun xemacs-buffer-syntactic-context (&optional buffer)
+  "Syntactic context at point in BUFFER.
+Either of `string', `comment' or nil.
+This is an XEmacs compatibility function."
+  (with-current-buffer (or buffer (current-buffer))
+    (let ((state (syntax-ppss (point))))
+      (cond
+       ((nth 3 state) 'string)
+       ((nth 4 state) 'comment)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;  Customizable Variables  ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -586,7 +565,12 @@ Methods currently supported:
 		(const :tag "Indicated by as many characters as needed" 3))
   :group 'fume)
 
-(defcustom fume-scanning-message "Scanning buffer... (%3d%%)"
+;;
+;; This used to be "Scanning buffer... (%3d%%)", but is now nil.
+;; Using a string seems to cause Emacs 26 much grief, and I don't have the
+;; time to track this down.
+;;
+(defcustom fume-scanning-message nil ;;"Scanning buffer... (%3d%%)"
   "*Message string format displayed during manual buffer function scans.
 Nil means inhibit such messages."
   :type '(choice (const :tag "None" nil) string)
@@ -1360,7 +1344,7 @@ Note, this can be very slow for large or non-trivial Makefiles.
 ;; Peter Pezaris <pez@dwwc.com>
 ;;
 (defun fume-cc-inside-comment ()
-  (memq (buffer-syntactic-context) '(comment block-comment)))
+  (memq (xemacs-buffer-syntactic-context) '(comment block-comment)))
 
 ;; <jrm@odi.com>
 ;; <ajp@eng.cam.ac.uk>
@@ -1890,23 +1874,47 @@ Otherwise returns fume-function-name-regexp"
                 'fume-find-next-function-name)))
   fume-function-name-regexp)
 
-;; (defun fume-add-menubar-entry (&optional force)
-;;   (interactive)
-;;   )
-  ;; (if force
-  ;;     (save-window-excursion (function-menu t))
-  ;;   (enqueue-eval-event 'fume-do-add-menubar-entry (current-buffer))))
+(fume-defvar-local fume-buffer-local-menu-cache nil
+  "Cached, buffer-specific menu.  This exists because different
+buffers will have different contents, even for the same mode.")
 
-(defun fume-do-add-menubar-entry (buffer)
-  (and (buffer-live-p buffer)
-       (save-excursion
-	 (save-window-excursion
-	   (set-buffer buffer)
-	   (function-menu t)))))
+(defun fume-reset-menu ()
+  (let (menu-name easymenu-menu)
+    ;;
+    ;; Uses cached menu info from fume-buffer-local-menu-cache
+    ;;
+    (if fume-buffer-local-menu-cache
+	(progn
+	  (setq menu-name (car fume-buffer-local-menu-cache))
+	  (setq menu-name-symbol (intern menu-name))
+	  (define-key-after (lookup-key (current-local-map) [menu-bar])
+	    (vector menu-name-symbol)
+	    fume-buffer-local-menu-cache t)
+	  ))
+    ))
+
+(add-hook 'menu-bar-update-hook 'fume-reset-menu)
+
+(defun fume-set-menu (menu-name easymenu-menu)
+  (let ()
+    (setq fume-buffer-local-menu-cache (cons menu-name easymenu-menu))
+    (fume-reset-menu) ;; gets info from fume-buffer-local-menu-cache
+    ))
+
+(defun fume-add-menu (easymenu-menu)
+  (let (menu-name menu-name-symbol)
+    ;; hot-n-cheesy check for an easymenu menu
+    (if (not (eq (car easymenu-menu) 'keymap))
+	(error "Not an easymenu menu: %s" easymenu-menu))
+    (setq menu-name (cadr easymenu-menu))
+    (if (not (stringp menu-name))
+	(error "Can't extract menu name from easymenu: %s" easymenu-menu))
+    (fume-set-menu menu-name easymenu-menu)
+    ))
 
 (defun fume-remove-menubar-entry ()
   (interactive)
-  (define-key (current-local-map) [menu-bar words] nil)
+  (define-key (current-local-map) [menu-bar Functions] nil)
   (force-mode-line-update))
 
 (defun fume-update-menubar-entry ()
@@ -2199,8 +2207,11 @@ An item looks like (NAME . POSITION)."
                           (setq find (symbol-value
                                       'fume-find-next-function-name-method))
                           (progn (end-of-line 1)
-                                 (re-search-backward
-                                  fume-function-name-regexp nil t))
+				 (if (consp fume-function-name-regexp)
+				     (re-search-backward
+				      (car fume-function-name-regexp) nil t)
+				   (re-search-backward
+				    fume-function-name-regexp nil t)))
                           (if (eq find 'fume-find-next-latex-section-name)
                               (let ((lnam
                                      (car (fume-find-next-latex-section-name
@@ -2386,7 +2397,7 @@ With optional third argument MENU-ITEM-FUNCTION, use this as the function
 called by each menu item (default = 'fume-goto-function).  This function
 must take two arguments, function menu item name (a string) and the position
 \(an integer) within the buffer to leave point when displaying this menu item."
-  ;;(interactive "P")
+  (interactive "P")
 
   (setq use-menubar
         (and use-menubar fume-not-tty t))
@@ -2474,40 +2485,10 @@ must take two arguments, function menu item name (a string) and the position
 		 ["Toggle buffer auto rescanning"
 		  fume-toggle-auto-rescanning t]
 		 ["About Func-Menu" fume-about t]))
-	;; (` ( ,fume-menubar-menu-name
-	;;     (,@ function-menu-items)
-	;;     "----"
-	;;     ["Display full list of functions"
-	;;      fume-list-functions t]
-	;;     ;; Bill Dubuque <wgd@martigny.ai.mit.edu>
-	;;     ;; This doesn't work with the old backquote.el
-	;;     ;;[(, (concat "Rescan buffer :  " (buffer-name)))
-	;;     ;; (fume-rescan-buffer (, (null use-menubar))) t]
-	;;     (, (vector
-	;; 	(concat "Rescan buffer: " (buffer-name))
-	;; 	(list 'fume-rescan-buffer (null use-menubar))
-	;; 	t))
-	;;     "----"
-	;;     ["Go to next function"
-	;;      fume-goto-next-function t]
-	;;     ["Go to previous function"
-	;;      fume-goto-previous-function t]
-	;;     "----"
-	;;     ["Toggle modeline display"
-	;;      fume-toggle-modeline-display t]
-	;;     ["Toggle buffer auto rescanning"
-	;;      fume-toggle-auto-rescanning t]
-	;;     ["About Func-Menu" fume-about t])))
-	;; (easy-menu-define fume-menu (current-local-map)
-	;;   "Menu for functions list"
-	;;   function-menu)
 	(easy-menu-define fume-menu nil
 	  "Menu for functions list"
 	  function-menu)
 	(fume-add-menu fume-menu)
-	;; (define-key-after (lookup-key (current-local-map) [menu-bar])
-	;;   [Functions]
-	;;   (cons "Functions" fume-menu) t)
 	)
       function-menu-items
       )
@@ -2859,6 +2840,8 @@ and then kill it will not be slowed down by `function-menu' processing)."
 
 (defun fume-do-setup-buffer (buffer)
   (and (buffer-live-p buffer)
+       ;; do we support this mode?
+       (assoc major-mode fume-function-name-regexp-alist)
        (save-excursion
 	 (save-window-excursion
 	   (set-buffer buffer)
